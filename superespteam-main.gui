@@ -1,0 +1,340 @@
+pcall(function()
+    -- CẤU HÌNH TRẠNG THÁI ESP
+    local Config = {
+        All_Mode = false,     -- Nút 1: Định vị tất cả (1 màu đỏ)
+        Dynamic_Mode = true,  -- Nút 2: Định vị chuyên sâu vai trò/nhóm -> MẶC ĐỊNH BẬT
+        Text_Size = 11,
+        Default_Color = Color3.fromRGB(255, 64, 64)
+    }
+
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Bảng màu vai trò mở rộng cho Flicker / Ma Sói / MM2
+    local FixedRoleColors = {
+        ["Murderer"] = Color3.fromRGB(255, 0, 0),       ["Sát thủ"] = Color3.fromRGB(255, 0, 0),
+        ["Werewolf"] = Color3.fromRGB(200, 0, 0),       ["Ma sói"] = Color3.fromRGB(200, 0, 0),
+        ["Dark Psychic"] = Color3.fromRGB(150, 0, 150), ["Evil"] = Color3.fromRGB(255, 0, 100),
+        ["Sheriff"] = Color3.fromRGB(0, 160, 255),      ["Cảnh sát"] = Color3.fromRGB(0, 160, 255),
+        ["Detective"] = Color3.fromRGB(0, 100, 255),    ["Thám tử"] = Color3.fromRGB(0, 100, 255),
+        ["Savior"] = Color3.fromRGB(0, 255, 200),       ["Medic"] = Color3.fromRGB(0, 255, 150),
+        ["Bác sĩ"] = Color3.fromRGB(0, 255, 150),       ["Twins"] = Color3.fromRGB(255, 182, 193),
+        ["Innocent"] = Color3.fromRGB(200, 200, 200),   ["Dân thường"] = Color3.fromRGB(200, 200, 200)
+    }
+
+    local AutoColors = {}
+    local function GetSmartColor(tag)
+        if FixedRoleColors[tag] then return FixedRoleColors[tag] end
+        if not AutoColors[tag] then
+            local s = 0 for i = 1, #tag do s = s + string.byte(tag, i) end
+            math.randomseed(s)
+            AutoColors[tag] = Color3.fromRGB(math.random(60, 255), math.random(120, 255), math.random(120, 255))
+        end
+        return AutoColors[tag]
+    end
+
+    -- BỘ QUÉT VAI TRÒ CHUYÊN SÂU DÀNH CHO FLICKER VÀ CÁC GAME KHÁC
+    local function IdentifyPlayer(player)
+        local char = player.Character
+        if player:GetAttribute("Role") then return tostring(player:GetAttribute("Role")) end
+        if player:GetAttribute("Team") then return tostring(player:GetAttribute("Team")) end
+        
+        local containers = {player, char, player:FindFirstChild("leaderstats"), player:FindFirstChild("PlayerData")}
+        for _, box in ipairs(containers) do
+            if box then
+                for _, obj in ipairs(box:GetChildren()) do
+                    if (obj.Name == "Role" or obj.Name == "RoleData" or obj.Name == "Faction" or obj.Name == "Job" or obj.Name == "CurrentRole") and obj:IsA("ValueBase") then
+                        if obj.Value and tostring(obj.Value) ~= "" then return tostring(obj.Value) end
+                    end
+                end
+            end
+        end
+
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack or char then
+            if (backpack and backpack:FindFirstChild("Knife")) or (char and char:FindFirstChild("Knife")) then return "Murderer" end
+            if (backpack and backpack:FindFirstChild("Gun")) or (char and char:FindFirstChild("Gun")) then return "Sheriff" end
+        end
+
+        if player.Team and player.Team.Name ~= "Choosing" and player.Team.Name ~= "Lobby" then return player.Team.Name end
+        return "Dân thường / Chưa rõ"
+    end
+
+    -- ==========================================
+    -- THIẾT KẾ GIAO DIỆN GUI (FLUENT STYLE)
+    -- ==========================================
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "Delta_ESP_PremiumGUI"
+    ScreenGui.ResetOnSpawn = false
+
+    -- Khung Menu Chính
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 230, 0, 180)
+    MainFrame.Position = UDim2.new(0.5, -115, 0.4, -90)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 27)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
+
+    local MainCorner = Instance.new("UICorner")
+    MainCorner.CornerRadius = UDim.new(0, 8)
+    MainCorner.Parent = MainFrame
+
+    local MainStroke = Instance.new("UIStroke")
+    MainStroke.Color = Color3.fromRGB(45, 45, 48)
+    MainStroke.Thickness = 1
+    MainStroke.Parent = MainFrame
+
+    -- Tiêu đề Menu
+    local Title = Instance.new("TextLabel")
+    Title.Name = "Title"
+    Title.Size = UDim2.new(1, 0, 0, 35)
+    Title.BackgroundTransparency = 1
+    Title.Text = "⚡ DELTA ESP MENU"
+    Title.TextColor3 = Color3.fromRGB(240, 240, 240)
+    Title.TextSize = 13
+    Title.Font = Enum.Font.GothamBold
+    Title.Parent = MainFrame
+
+    -- Thống kê trạng thái hiện tại
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Name = "StatusLabel"
+    StatusLabel.Size = UDim2.new(1, 0, 0, 20)
+    StatusLabel.Position = UDim2.new(0, 0, 0, 32)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "Chế độ: Vai Trò Chuyên Sâu"
+    StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 200)
+    StatusLabel.TextSize = 11
+    StatusLabel.Font = Enum.Font.GothamMedium
+    StatusLabel.Parent = MainFrame
+
+    -- Nút bật/tắt chế độ 1 (All Mode)
+    local BtnAll = Instance.new("TextButton")
+    BtnAll.Name = "BtnAll"
+    BtnAll.Size = UDim2.new(0, 190, 0, 35)
+    BtnAll.Position = UDim2.new(0, 20, 0, 65)
+    BtnAll.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+    BtnAll.Text = "Định Vị Tất Cả: TẮT"
+    BtnAll.TextColor3 = Color3.fromRGB(200, 200, 200)
+    BtnAll.TextSize = 11
+    BtnAll.Font = Enum.Font.GothamBold
+    BtnAll.BorderSizePixel = 0
+    BtnAll.Parent = MainFrame
+    Instance.new("UICorner", BtnAll).CornerRadius = UDim.new(0, 6)
+    local StrokeAll = Instance.new("UIStroke", BtnAll)
+    StrokeAll.Color = Color3.fromRGB(55, 55, 58)
+
+    -- Nút bật/tắt chế độ 2 (Dynamic Mode)
+    local BtnDynamic = Instance.new("TextButton")
+    BtnDynamic.Name = "BtnDynamic"
+    BtnDynamic.Size = UDim2.new(0, 190, 0, 35)
+    BtnDynamic.Position = UDim2.new(0, 20, 0, 110)
+    BtnDynamic.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    BtnDynamic.Text = "Định Vị Vai Trò: BẬT"
+    BtnDynamic.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BtnDynamic.TextSize = 11
+    BtnDynamic.Font = Enum.Font.GothamBold
+    BtnDynamic.BorderSizePixel = 0
+    BtnDynamic.Parent = MainFrame
+    Instance.new("UICorner", BtnDynamic).CornerRadius = UDim.new(0, 6)
+    local StrokeDyn = Instance.new("UIStroke", BtnDynamic)
+    StrokeDyn.Color = Color3.fromRGB(0, 150, 255)
+
+    -- Nút tròn thu nhỏ mở lại Menu
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Name = "Delta_Toggle_Fix"
+    ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
+    ToggleBtn.Position = UDim2.new(0, 15, 0, 45)
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 27)
+    ToggleBtn.Text = "⚙️"
+    ToggleBtn.TextSize = 18
+    ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
+    ToggleBtn.Visible = false
+    ToggleBtn.Parent = ScreenGui
+    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+    local StrokeTog = Instance.new("UIStroke", ToggleBtn)
+    StrokeTog.Color = Color3.fromRGB(0, 255, 255)
+
+    -- Nút đóng góc trên bên phải
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 20, 0, 20)
+    CloseBtn.Position = UDim2.new(1, -25, 0, 8)
+    CloseBtn.BackgroundTransparency = 1
+    CloseBtn.Text = "✕"
+    CloseBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    CloseBtn.TextSize = 12
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.Parent = MainFrame
+
+    -- ==========================================
+    -- LOGIC ĐIỀU KHIỂN GUI TỰ ĐỘNG ĐỔI TRẠNG THÁI
+    -- ==========================================
+    local function UpdateVisuals()
+        -- Cập nhật nút Định Vị Tất Cả
+        if Config.All_Mode then
+            BtnAll.BackgroundColor3 = Color3.fromRGB(215, 50, 50)
+            BtnAll.TextColor3 = Color3.fromRGB(255, 255, 255)
+            BtnAll.Text = "Định Vị Tất Cả: BẬT"
+            StrokeAll.Color = Color3.fromRGB(255, 100, 100)
+        else
+            BtnAll.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+            BtnAll.TextColor3 = Color3.fromRGB(200, 200, 200)
+            BtnAll.Text = "Định Vị Tất Cả: TẮT"
+            StrokeAll.Color = Color3.fromRGB(55, 55, 58)
+        end
+
+        -- Cập nhật nút Định Vị Vai Trò
+        if Config.Dynamic_Mode then
+            BtnDynamic.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+            BtnDynamic.TextColor3 = Color3.fromRGB(255, 255, 255)
+            BtnDynamic.Text = "Định Vị Vai Trò: BẬT"
+            StrokeDyn.Color = Color3.fromRGB(0, 150, 255)
+        else
+            BtnDynamic.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+            BtnDynamic.TextColor3 = Color3.fromRGB(200, 200, 200)
+            BtnDynamic.Text = "Định Vị Vai Trò: TẮT"
+            StrokeDyn.Color = Color3.fromRGB(55, 55, 58)
+        end
+
+        -- Cập nhật dòng chữ trạng thái tổng quát
+        if not Config.All_Mode and not Config.Dynamic_Mode then
+            StatusLabel.Text = "Hệ thống: ĐÃ TẮT ĐỊNH VỊ"
+            StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        elseif Config.All_Mode then
+            StatusLabel.Text = "Chế độ: Định Vị Tất Cả (1 Màu)"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        elseif Config.Dynamic_Mode then
+            StatusLabel.Text = "Chế độ: Vai Trò Chuyên Sâu"
+            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 200)
+        end
+    end
+
+    -- Cơ chế hoạt động như nút công tắc (Bấm phát nữa là tắt)
+    BtnAll.Activated:Connect(function()
+        if Config.All_Mode then
+            Config.All_Mode = false -- Nếu đang bật thì tắt đi
+        else
+            Config.All_Mode = true
+            Config.Dynamic_Mode = false -- Tắt chế độ còn lại để tránh trùng lặp chữ
+        end
+        UpdateVisuals()
+    end)
+
+    BtnDynamic.Activated:Connect(function()
+        if Config.Dynamic_Mode then
+            Config.Dynamic_Mode = false -- Nếu đang bật thì tắt đi
+        else
+            Config.Dynamic_Mode = true
+            Config.All_Mode = false -- Tắt chế độ còn lại
+        end
+        UpdateVisuals()
+    end)
+
+    CloseBtn.Activated:Connect(function()
+        MainFrame.Visible = false
+        ToggleBtn.Visible = true
+    end)
+
+    ToggleBtn.Activated:Connect(function()
+        MainFrame.Visible = true
+        ToggleBtn.Visible = false
+    end)
+
+    -- Tính năng Kéo thả (Drag GUI) mượt mà cho PC/Mobile
+    local dragging, dragInput, dragStart, startPos
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    MainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- Vòng lặp kiểm tra bảo vệ GUI (Anti-Delete) từ CoreGui/PlayerGui
+    task.spawn(function()
+        while task.wait(2) do
+            local targetParent = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+            if not targetParent:FindFirstChild("Delta_ESP_PremiumGUI") then
+                pcall(function() ScreenGui.Parent = targetParent end)
+            end
+        end
+    end)
+
+    -- Gọi cập nhật giao diện ban đầu theo cấu hình mặc định
+    UpdateVisuals()
+
+    -- ==========================================
+    -- HỆ THỐNG VẼ ESP ĐỒ HỌA THỜI GIAN THỰC
+    -- ==========================================
+    local ESP_Cache = {}
+
+    local function ApplyESP(player)
+        if player == LocalPlayer then return end
+        local text = Drawing.new("Text")
+        text.Visible = false
+        text.Center = true
+        text.Outline = true
+        text.Size = Config.Text_Size
+        text.Transparency = 1
+        ESP_Cache[player] = text
+    end
+
+    Players.PlayerAdded:Connect(ApplyESP)
+    Players.PlayerRemoving:Connect(function(player)
+        if ESP_Cache[player] then ESP_Cache[player]:Remove() ESP_Cache[player] = nil end
+    end)
+    for _, p in ipairs(Players:GetPlayers()) do ApplyESP(p) end
+
+    RunService.RenderStepped:Connect(function()
+        for player, text in pairs(ESP_Cache) do
+            pcall(function()
+                if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+                    local hrp = player.Character.HumanoidRootPart
+                    local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hrp.Position)
+                    
+                    if onScreen and vector.Y > 50 then
+                        local distance = 0
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
+                        end
+
+                        if Config.All_Mode then
+                            text.Text = string.format("%s\n%dm", player.Name, distance)
+                            text.Color = Config.Default_Color
+                            text.Visible = true
+                        elseif Config.Dynamic_Mode then
+                            local role = IdentifyPlayer(player)
+                            text.Text = string.format("[%s]\n%s\n%dm", role, player.Name, distance)
+                            text.Color = GetSmartColor(role)
+                            text.Visible = true
+                        else
+                            -- Nếu cả 2 chế độ đều bằng FALSE, ẩn toàn bộ chữ ESP đi ngay lập tức
+                            text.Visible = false
+                        end
+                        text.Position = Vector2.new(vector.X, vector.Y)
+                    else
+                        text.Visible = false
+                    end
+                else
+                    text.Visible = false
+                end
+            end)
+        end
+    end)
+end)
