@@ -1,0 +1,188 @@
+-- Bọc toàn bộ script trong một hàm an toàn để tránh sập nửa chừng
+pcall(function()
+    -- ==========================================
+    -- CẤU HÌNH CƠ BẢN
+    -- ==========================================
+    local Config = {
+        Menu_Open = true,
+        Team_ESP = true,       -- ESP Đồng Đội (Màu theo Team gốc của game)
+        Enemy_ESP = true,      -- ESP Thường/Địch (Màu Đỏ chỉnh tùy ý)
+        Text_Size = 13,
+        Enemy_Color = Color3.fromRGB(255, 50, 50) -- Màu đỏ sáng cho địch
+    }
+
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Đợi game tải xong LocalPlayer để tránh lỗi crash script
+    if not LocalPlayer then 
+        Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+        LocalPlayer = Players.LocalPlayer
+    end
+
+    -- ==========================================
+    -- SỬA LỖI MENU: ĐẨY VÀO PLAYERGUI ĐỂ CHẮC CHẮN HIỆN
+    -- ==========================================
+    -- Xóa menu cũ nếu có để tránh trùng lặp
+    local oldGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("Delta_Safe_ESP")
+    if oldGui then oldGui:Destroy() end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "Delta_Safe_ESP"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") -- Đẩy vào đây Delta sẽ không chặn
+
+    -- Khung Menu Chính (Hỗ trợ kéo di chuyển trên điện thoại)
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 240, 0, 140)
+    MainFrame.Position = UDim2.new(0, 30, 0, 120) -- Hiển thị ở góc trên bên trái màn hình
+    MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    MainFrame.BackgroundTransparency = 0.1
+    MainFrame.BorderSizePixel = 2
+    MainFrame.BorderColor3 = Color3.fromRGB(0, 255, 255) -- Viền Neon sáng
+    MainFrame.Active = true
+    MainFrame.Draggable = true -- Nhấn giữ để di chuyển tự do trên màn hình cảm ứng
+    MainFrame.Parent = ScreenGui
+
+    -- Tiêu đề Menu
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 28)
+    Title.Text = "⚡ DELTA ESP PREMIUM"
+    Title.TextSize = 13
+    Title.Font = Enum.Font.SourceSansBold
+    Title.TextColor3 = Color3.fromRGB(255, 215, 0)
+    Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Title.Parent = MainFrame
+
+    -- Hàm tiện ích tạo nút bấm nhanh chống lỗi
+    local function CreateMenuButton(text, pos, color, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -20, 0, 32)
+        btn.Position = pos
+        btn.Text = text
+        btn.TextSize = 12
+        btn.Font = Enum.Font.SourceSansBold
+        btn.BackgroundColor3 = color
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        
+        -- Bo tròn góc nút cho đẹp mắt
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 4)
+        corner.Parent = btn
+        
+        btn.MouseButton1Click:Connect(callback)
+        btn.Parent = MainFrame
+        return btn
+    end
+
+    local TeamBtn, EnemyBtn
+    
+    TeamBtn = CreateMenuButton("ESP Đồng Đội: BẬT", UDim2.new(0, 10, 0, 42), Color3.fromRGB(0, 120, 0), function()
+        Config.Team_ESP = not Config.Team_ESP
+        TeamBtn.Text = Config.Team_ESP and "ESP Đồng Đội: BẬT" or "ESP Đồng Đội: TẮT"
+        TeamBtn.BackgroundColor3 = Config.Team_ESP and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(150, 0, 0)
+    end)
+
+    EnemyBtn = CreateMenuButton("ESP Thường (Địch): BẬT", UDim2.new(0, 10, 0, 84), Color3.fromRGB(0, 120, 0), function()
+        Config.Enemy_ESP = not Config.Enemy_ESP
+        EnemyBtn.Text = Config.Enemy_ESP and "ESP Thường (Địch): BẬT" or "ESP Thường (Địch): TẮT"
+        EnemyBtn.BackgroundColor3 = Config.Enemy_ESP and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(150, 0, 0)
+    end)
+
+    -- Nút nhỏ ẩn/hiện Menu dành riêng cho người dùng điện thoại (Đặt ở góc trên cùng màn hình)
+    local ToggleMenuBtn = Instance.new("TextButton")
+    ToggleMenuBtn.Size = UDim2.new(0, 80, 0, 25)
+    ToggleMenuBtn.Position = UDim2.new(0.5, -40, 0, 5)
+    ToggleMenuBtn.Text = "[ Ẩn / Hiện ]"
+    ToggleMenuBtn.TextSize = 11
+    ToggleMenuBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    ToggleMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleMenuBtn.Parent = ScreenGui
+
+    ToggleMenuBtn.MouseButton1Click:Connect(function()
+        Config.Menu_Open = not Config.Menu_Open
+        MainFrame.Visible = Config.Menu_Open
+    end)
+
+    -- ==========================================
+    -- HỆ THỐNG QUÉT VÀ VẼ ESP (CHỐNG LỖI CRASH)
+    -- ==========================================
+    local ESP_Cache = {}
+
+    local function CreateESP(player)
+        if player == LocalPlayer then return end
+        
+        -- Sử dụng cấu trúc Drawing chuẩn của Delta để không bị lag đen màn hình
+        local text = Drawing.new("Text")
+        text.Visible = false
+        text.Center = true
+        text.Outline = true
+        text.Size = Config.Text_Size
+        
+        ESP_Cache[player] = text
+    end
+
+    local function RemoveESP(player)
+        if ESP_Cache[player] then
+            ESP_Cache[player]:Remove()
+            ESP_Cache[player] = nil
+        end
+    end
+
+    Players.PlayerAdded:Connect(CreateESP)
+    Players.PlayerRemoving:Connect(RemoveESP)
+    for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
+
+    -- Vòng lặp cập nhật vị trí thời gian thực
+    RunService.RenderStepped:Connect(function()
+        for player, text in pairs(ESP_Cache) do
+            -- Thêm pcall kiểm tra từng người chơi để lỡ có ai thoát game đột ngột script không bị dừng
+            pcall(function()
+                if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+                    
+                    local hrp = player.Character.HumanoidRootPart
+                    local humanoid = player.Character.Humanoid
+                    local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hrp.Position)
+                    
+                    -- Xác định đồng đội hay kẻ địch
+                    local isTeam = (player.Team == LocalPlayer.Team)
+                    local allowedToDraw = false
+                    local drawColor = Color3.fromRGB(255, 255, 255)
+                    local tagType = ""
+
+                    if isTeam and Config.Team_ESP then
+                        allowedToDraw = true
+                        -- Tự động lấy màu Đa Sắc theo màu nhóm gốc của game cấp cho người chơi đó
+                        drawColor = player.TeamColor.Color
+                        tagType = "TEAM"
+                    elseif not isTeam and Config.Enemy_ESP then
+                        allowedToDraw = true
+                        drawColor = Config.Enemy_Color
+                        tagType = "ĐỊCH"
+                    end
+
+                    if onScreen and allowedToDraw then
+                        -- Tính toán khoảng cách an toàn (Phòng hờ nhân vật của bạn đang chết)
+                        local distance = 0
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
+                        end
+                        
+                        local teamName = player.Team and player.Team.Name or "Không nhóm"
+                        
+                        -- Hiển thị thông tin chữ nhỏ thanh mảnh
+                        text.Text = string.format("[%s][%s]\n%s\nHP: %d | %dm", tagType, teamName, player.Name, math.floor(humanoid.Health), distance)
+                        text.Position = Vector2.new(vector.X, vector.Y)
+                        text.Color = drawColor
+                        text.Visible = true
+                    else
+                        text.Visible = false
+                    end
+                else
+                    text.Visible = false
+                end
+            end)
+        end
+    end)
+end)
