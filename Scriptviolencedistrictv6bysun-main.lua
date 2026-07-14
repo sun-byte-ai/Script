@@ -1,5 +1,5 @@
 -- =========================================================================
--- SURVIVAL ENGINE HUB - PHIÊN BẢN SỬA LỖI TOÀN DIỆN & CUSTOM STUDS
+-- SURVIVAL ENGINE HUB - PHIÊN BẢN HIỂN THỊ TÊN RIÊNG TỪNG SURVIVOR
 -- =========================================================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -16,7 +16,7 @@ local FURNITURE_BLACKLIST = {"table", "desk", "chair", "shelf", "cabinet", "ward
 -- 1. GIAO DIỆN GUI CỔ ĐIỂN & THANH HỖ TRỢ
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ClassicSurvivalHub_FixedFinal"
+ScreenGui.Name = "ClassicSurvivalHub_Finalv2"
 ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
 
@@ -51,7 +51,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Text = "  [💀] SURVIVAL HUB - FIXED & UPGRADE"
+Title.Text = "  [💀] SURVIVAL HUB - INDIVIDUAL ESP"
 Title.Font = Enum.Font.Code
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -74,7 +74,7 @@ end
 
 local Btn1 = CreateClassicButton(45, "Button 1: Auto Dodge Killer", 35)
 
--- THANH HỖ TRỢ BUTTON 1: NHẬP SỐ KHOẢNG CÁCH KHỞI CHẠY KHẨN CẤP
+-- THANH HỖ TRỢ BUTTON 1: NHẬP SỐ KHOẢNG CÁCH STUDS
 local StudsInput = Instance.new("TextBox")
 StudsInput.Size = UDim2.new(0.92, 0, 0, 25)
 StudsInput.Position = UDim2.new(0.04, 0, 0, 85)
@@ -132,7 +132,6 @@ local function FindActiveKiller()
     return nil
 end
 
--- Thuật toán quét máy cải tiến hoàn toàn mới
 local function ScanMapMachines()
     local foundMachines = {}
     for _, obj in pairs(Workspace:GetDescendants()) do
@@ -172,7 +171,6 @@ local function DeployEmergencyBunker(currentPos)
     barrier.Anchored = true; barrier.Transparency = 1; barrier.Parent = UndergroundBunker
 end
 
--- Hệ thống ESP động: Cập nhật dữ liệu thời gian thực thay vì xóa đè bừa bãi
 local function ApplyHighlightESP(object, color, labelText, prefix)
     if not object then return end
     local hlName = prefix .. "Highlight"
@@ -193,7 +191,7 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
         if not billboard then
             billboard = Instance.new("BillboardGui")
             billboard.Name = bbName
-            billboard.Size = UDim2.new(0, 120, 0, 35)
+            billboard.Size = UDim2.new(0, 140, 0, 35) -- Tăng nhẹ chiều rộng để vừa tên dài
             billboard.StudsOffset = Vector3.new(0, 4, 0)
             billboard.AlwaysOnTop = true
             
@@ -202,7 +200,7 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
             txt.Size = UDim2.new(1, 0, 1, 0)
             txt.BackgroundTransparency = 1
             txt.Font = Enum.Font.Code
-            txt.TextSize = 14
+            txt.TextSize = 13
             txt.Parent = billboard
             
             billboard.Adornee = object:IsA("Model") and (object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")) or object
@@ -223,7 +221,7 @@ end
 -- 3. XỬ LÝ HÀNH VI VÒNG LẶP HỆ THỐNG
 -- ==========================================
 
--- [BUTTON 1]: AUTO DODGE (ĐÃ FIX PHÍA TRƯỚC MÁY & FILTER KHOẢNG CÁCH)
+-- [BUTTON 1]: AUTO DODGE
 Btn1.MouseButton1Click:Connect(function()
     ToggleButton(Btn1, "AutoDodge", "Button 1: Auto Dodge Killer")
     task.spawn(function()
@@ -243,7 +241,6 @@ Btn1.MouseButton1Click:Connect(function()
                         
                         for _, machine in pairs(allMachines) do
                             local machineCFrame = machine:IsA("Model") and machine:GetPivot() or machine.CFrame
-                            -- ĐIỀU KIỆN MỚI: Chỉ dịch chuyển tới máy cách Killer trên 110 Studs
                             if (machineCFrame.Position - killerHRP.Position).Magnitude >= 110 then
                                 targetedMachineCFrame = machineCFrame
                                 break
@@ -251,7 +248,6 @@ Btn1.MouseButton1Click:Connect(function()
                         end
                         
                         if targetedMachineCFrame then
-                            -- Dịch chuyển ra TRƯỚC mặt máy thay vì trên đầu để tránh kẹt lỗi hình học
                             myHRP.CFrame = targetedMachineCFrame * CFrame.new(0, 1.5, 4.5)
                             task.wait(0.4) 
                         else
@@ -266,7 +262,7 @@ Btn1.MouseButton1Click:Connect(function()
     end)
 end)
 
--- [BUTTON 2]: ESP PLAYERS (ĐÃ FIX LỖI ẨN HIỆN)
+-- [BUTTON 2]: ESP KILLER & ĐỊNH DANH TÊN RIÊNG TỪNG SURVIVOR
 Btn2.MouseButton1Click:Connect(function()
     ToggleButton(Btn2, "ESPPlayers", "Button 2: ESP Killer & Survive")
     if not States.ESPPlayers then
@@ -280,9 +276,11 @@ Btn2.MouseButton1Click:Connect(function()
                 for _, player in pairs(Players:GetPlayers()) do
                     if player ~= LocalPlayer and player.Character then
                         if player == currentKiller then
-                            ApplyHighlightESP(player.Character, Color3.fromRGB(255, 0, 0), "[🎯] KILLER", "Player")
+                            -- Gắn nhãn Đỏ cảnh báo cho Killer kèm theo tên
+                            ApplyHighlightESP(player.Character, Color3.fromRGB(255, 0, 0), "[🎯] KILLER: " .. player.Name, "Player")
                         else
-                            ApplyHighlightESP(player.Character, Color3.fromRGB(0, 255, 100), "SURVIVOR", "Player")
+                            -- [CẬP NHẬT] Gắn nhãn Xanh lá cây hiển thị Tên riêng biệt của từng đồng đội
+                            ApplyHighlightESP(player.Character, Color3.fromRGB(0, 255, 100), "[👤] " .. player.Name, "Player")
                         end
                     end
                 end
@@ -291,7 +289,7 @@ Btn2.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 3]: ESP MÁY SỬA (ĐÃ FIX KHÔNG HIỂN THỊ)
+-- [BUTTON 3]: ESP MÁY SỬA
 Btn3.MouseButton1Click:Connect(function()
     ToggleButton(Btn3, "ESPMachines", "Button 3: ESP Machines (Zone Scan)")
     if not States.ESPMachines then
@@ -312,3 +310,4 @@ Btn3.MouseButton1Click:Connect(function()
         end)
     end
 end)
+
