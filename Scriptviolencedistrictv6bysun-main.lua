@@ -1,5 +1,5 @@
 -- =========================================================================
--- SURVIVAL ENGINE HUB - PHIÊN BẢN HIỂN THỊ TÊN RIÊNG TỪNG SURVIVOR
+-- SURVIVAL ENGINE HUB - PHIÊN BẢN CÂN BẰNG ĐỘ SÁNG NGÀY & ĐÊM
 -- =========================================================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -9,14 +9,13 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local UndergroundBunker = nil
 
--- Danh sách đen loại bỏ đồ nội thất sảnh
 local FURNITURE_BLACKLIST = {"table", "desk", "chair", "shelf", "cabinet", "wardrobe", "bed", "dresser", "furniture", "prop", "sanh", "lobby", "bookcase"}
 
 -- ==========================================
 -- 1. GIAO DIỆN GUI CỔ ĐIỂN & THANH HỖ TRỢ
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ClassicSurvivalHub_Finalv2"
+ScreenGui.Name = "ClassicSurvivalHub_Balancedv3"
 ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
 
@@ -51,7 +50,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Text = "  [💀] SURVIVAL HUB - INDIVIDUAL ESP"
+Title.Text = "  [💀] SURVIVAL HUB - HYBRID VISION"
 Title.Font = Enum.Font.Code
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -74,7 +73,6 @@ end
 
 local Btn1 = CreateClassicButton(45, "Button 1: Auto Dodge Killer", 35)
 
--- THANH HỖ TRỢ BUTTON 1: NHẬP SỐ KHOẢNG CÁCH STUDS
 local StudsInput = Instance.new("TextBox")
 StudsInput.Size = UDim2.new(0.92, 0, 0, 25)
 StudsInput.Position = UDim2.new(0.04, 0, 0, 85)
@@ -116,7 +114,7 @@ local function ToggleButton(btn, stateKey, baseText)
 end
 
 -- ==========================================
--- 2. THUẬT TOÁN QUÉT VÀ HIỂN THỊ ĐỘC LẬP
+-- 2. THUẬT TOÁN ĐỊNH VỊ VÀ LỌC TRẠNG THÁI MÁY
 -- ==========================================
 
 local function FindActiveKiller()
@@ -142,9 +140,34 @@ local function ScanMapMachines()
                 for _, word in pairs(FURNITURE_BLACKLIST) do
                     if string.find(nameLower, word) then isFake = true; break end
                 end
+                
                 if not isFake then
                     local targetModel = obj:IsA("BasePart") and obj.Parent:IsA("Model") and obj.Parent ~= Workspace and obj.Parent.Name ~= "Map" and obj.Parent or obj
-                    if not table.find(foundMachines, targetModel) then
+                    
+                    local hasActivePrompt = false
+                    local hasPromptAtAll = false
+                    
+                    for _, child in pairs(targetModel:GetDescendants()) do
+                        if child:IsA("ProximityPrompt") or child:IsA("ClickDetector") then
+                            hasPromptAtAll = true
+                            if child:IsA("ProximityPrompt") and child.Enabled then
+                                hasActivePrompt = true
+                            elseif child:IsA("ClickDetector") then
+                                hasActivePrompt = true
+                            end
+                        end
+                    end
+                    
+                    if hasPromptAtAll and not hasActivePrompt then isFake = true end
+                    
+                    if targetModel:GetAttribute("Repaired") == true or 
+                       targetModel:GetAttribute("Completed") == true or 
+                       targetModel:GetAttribute("Progress") == 100 or 
+                       targetModel:GetAttribute("Finished") == true then
+                        isFake = true
+                    end
+                    
+                    if not isFake and not table.find(foundMachines, targetModel) then
                         table.insert(foundMachines, targetModel)
                     end
                 end
@@ -171,6 +194,7 @@ local function DeployEmergencyBunker(currentPos)
     barrier.Anchored = true; barrier.Transparency = 1; barrier.Parent = UndergroundBunker
 end
 
+-- Hàm Custom ESP cân bằng môi trường Sáng / Tối
 local function ApplyHighlightESP(object, color, labelText, prefix)
     if not object then return end
     local hlName = prefix .. "Highlight"
@@ -183,15 +207,24 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
         highlight.Parent = object
     end
     highlight.FillColor = color
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.4
+    
+    -- [CẬP NHẬT] ĐỘ MỜ "TỶ LỆ VÀNG" ĐỂ HỢP CẢ NGÀY LẪN ĐÊM
+    if prefix == "Machine" then
+        highlight.OutlineColor = color 
+        highlight.FillTransparency = 0.62     -- Tăng nhẹ độ đậm để ban ngày nhìn thấy khối máy tốt hơn
+        highlight.OutlineTransparency = 0.2    -- Giữ nét viền rõ ràng nhưng không bị rực viền trắng
+    else
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.4
+        highlight.OutlineTransparency = 0
+    end
     
     if labelText then
         local billboard = object:FindFirstChild(bbName)
         if not billboard then
             billboard = Instance.new("BillboardGui")
             billboard.Name = bbName
-            billboard.Size = UDim2.new(0, 140, 0, 35) -- Tăng nhẹ chiều rộng để vừa tên dài
+            billboard.Size = UDim2.new(0, 140, 0, 35)
             billboard.StudsOffset = Vector3.new(0, 4, 0)
             billboard.AlwaysOnTop = true
             
@@ -208,6 +241,16 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
         end
         billboard.TextLabel.Text = labelText
         billboard.TextLabel.TextColor3 = color
+        
+        -- [CẬP NHẬT CHỐNG LÓA BAN NGÀY] Thêm viền chữ đen để hack tầm nhìn ban ngày
+        if prefix == "Machine" then
+            billboard.TextLabel.TextTransparency = 0.1       -- Giữ chữ rõ nét (chỉ mờ 10%)
+            billboard.TextLabel.TextStrokeTransparency = 0.15 -- Đổ bóng viền đen đậm sắc nét
+            billboard.TextLabel.TextStrokeColor3 = Color3.fromRGB(10, 10, 10) -- Viền đen tuyền bao quanh chữ
+        else
+            billboard.TextLabel.TextTransparency = 0
+            billboard.TextLabel.TextStrokeTransparency = 1
+        end
     end
 end
 
@@ -262,7 +305,7 @@ Btn1.MouseButton1Click:Connect(function()
     end)
 end)
 
--- [BUTTON 2]: ESP KILLER & ĐỊNH DANH TÊN RIÊNG TỪNG SURVIVOR
+-- [BUTTON 2]: ESP PLAYERS
 Btn2.MouseButton1Click:Connect(function()
     ToggleButton(Btn2, "ESPPlayers", "Button 2: ESP Killer & Survive")
     if not States.ESPPlayers then
@@ -276,10 +319,8 @@ Btn2.MouseButton1Click:Connect(function()
                 for _, player in pairs(Players:GetPlayers()) do
                     if player ~= LocalPlayer and player.Character then
                         if player == currentKiller then
-                            -- Gắn nhãn Đỏ cảnh báo cho Killer kèm theo tên
                             ApplyHighlightESP(player.Character, Color3.fromRGB(255, 0, 0), "[🎯] KILLER: " .. player.Name, "Player")
                         else
-                            -- [CẬP NHẬT] Gắn nhãn Xanh lá cây hiển thị Tên riêng biệt của từng đồng đội
                             ApplyHighlightESP(player.Character, Color3.fromRGB(0, 255, 100), "[👤] " .. player.Name, "Player")
                         end
                     end
@@ -289,7 +330,7 @@ Btn2.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 3]: ESP MÁY SỬA
+-- [BUTTON 3]: ESP MÁY SỬA (Chế độ Hybrid Ngày/Đêm)
 Btn3.MouseButton1Click:Connect(function()
     ToggleButton(Btn3, "ESPMachines", "Button 3: ESP Machines (Zone Scan)")
     if not States.ESPMachines then
@@ -303,11 +344,11 @@ Btn3.MouseButton1Click:Connect(function()
                 
                 local currentActiveMachines = ScanMapMachines()
                 for _, machine in pairs(currentActiveMachines) do
-                    ApplyHighlightESP(machine, Color3.fromRGB(255, 185, 0), "GENERATOR", "Machine")
+                    -- Sử dụng tông vàng hổ phách ấm (235, 140, 20) cực kỳ thích nghi môi trường
+                    ApplyHighlightESP(machine, Color3.fromRGB(235, 140, 20), "GENERATOR", "Machine")
                 end
                 task.wait(2.5)
             end
         end)
     end
 end)
-
