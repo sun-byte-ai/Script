@@ -90,7 +90,8 @@ StudsInput.Parent = MainFrame
 local Btn2 = CreateClassicButton(115, "Button 2: ESP Killer & Survive", 35)
 local Btn3 = CreateClassicButton(155, "Button 3: ESP Machines (Zone Scan)", 35)
 
-local States = { AutoDodge = false, ESPPlayers = false, ESPMachines = false, DodgeDistance = 48, EspMaxDistance = 270 }
+-- Đã chỉnh EspMaxDistance xuống 150 studs
+local States = { AutoDodge = false, ESPPlayers = false, ESPMachines = false, DodgeDistance = 48, EspMaxDistance = 150 }
 
 StudsInput.FocusLost:Connect(function(enterPressed)
     local value = tonumber(StudsInput.Text)
@@ -390,17 +391,15 @@ Btn1.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 2]: ESP PLAYERS (GIỚI HẠN 270 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
+-- [BUTTON 2]: ESP PLAYERS (GIỚI HẠN 150 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
 Btn2.MouseButton1Click:Connect(function()
     ToggleButton(Btn2, "ESPPlayers", "Button 2: ESP Killer & Survive")
     if not States.ESPPlayers then
-        -- Xoá bỏ triệt để mọi đối tượng ESP người chơi trên toàn map ngay lập tức
         RemoveAllESPByTag("Player")
     else
         task.spawn(function()
             while States.ESPPlayers do
                 task.wait(0.25)
-                -- Kiểm tra lại trạng thái ở đầu vòng lặp để chặn luồng chạy ngầm khi đã tắt nút
                 if not States.ESPPlayers then 
                     RemoveAllESPByTag("Player")
                     break 
@@ -411,7 +410,6 @@ Btn2.MouseButton1Click:Connect(function()
                 local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
                 
                 for _, player in pairs(Players:GetPlayers()) do
-                    -- Nếu trong quá trình lặp mà người dùng tắt nút, xóa luôn và dừng quét
                     if not States.ESPPlayers then 
                         RemoveAllESPByTag("Player")
                         break 
@@ -425,6 +423,7 @@ Btn2.MouseButton1Click:Connect(function()
                         if myHRP and pHRP then
                             local distance = (myHRP.Position - pHRP.Position).Magnitude
                             
+                            -- Kiểm tra khoảng cách dưới 150 studs
                             if distance <= States.EspMaxDistance then
                                 if player == currentKiller then
                                     ApplyHighlightESP(pChar, Color3.fromRGB(255, 0, 0), "[🎯] KILLER: " .. player.Name, "Player")
@@ -433,17 +432,17 @@ Btn2.MouseButton1Click:Connect(function()
                                     if pHum then
                                         local healthPct = (pHum.Health / pHum.MaxHealth) * 100
                                         if healthPct >= 70 then
-                                            surviveColor = Color3.fromRGB(0, 255, 100) -- Máu đầy: Xanh lá
+                                            surviveColor = Color3.fromRGB(0, 255, 100) -- Máu đầy
                                         elseif healthPct >= 30 and healthPct < 70 then
-                                            surviveColor = Color3.fromRGB(200, 255, 0) -- Máu trung bình: Vàng chanh
+                                            surviveColor = Color3.fromRGB(200, 255, 0) -- Máu trung bình
                                         else
-                                            surviveColor = Color3.fromRGB(255, 100, 0) -- Máu thấp: Đỏ vàng
+                                            surviveColor = Color3.fromRGB(255, 100, 0) -- Máu thấp
                                         end
                                     end
                                     ApplyHighlightESP(pChar, surviveColor, "[👤] " .. player.Name .. " [" .. math.floor(distance) .. "m]", "Player")
                                 end
                             else
-                                -- Tự động xóa hẳn các đối tượng ESP nếu đi quá 270 studs
+                                -- Tự động xóa hẳn các đối tượng ESP nếu đi quá 150 studs
                                 ClearObjectESP(pChar, "Player")
                             end
                         end
@@ -454,16 +453,14 @@ Btn2.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 3]: ESP MÁY SỬA (GIỚI HẠN 270 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
+-- [BUTTON 3]: ESP MÁY SỬA (GIỚI HẠN 150 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
 Btn3.MouseButton1Click:Connect(function()
     ToggleButton(Btn3, "ESPMachines", "Button 3: ESP Machines (Zone Scan)")
     if not States.ESPMachines then
-        -- Xoá bỏ triệt để mọi đối tượng ESP máy trên toàn map ngay lập tức
         RemoveAllESPByTag("Machine")
     else
         task.spawn(function()
             while States.ESPMachines do
-                -- Kiểm tra lại trạng thái ở đầu vòng lặp để chặn luồng chạy ngầm khi đã tắt nút
                 if not States.ESPMachines then 
                     RemoveAllESPByTag("Machine")
                     break 
@@ -474,7 +471,6 @@ Btn3.MouseButton1Click:Connect(function()
                 local currentActiveMachines = ScanMapMachines()
                 
                 for _, machine in pairs(currentActiveMachines) do
-                    -- Nếu trong quá trình lặp mà người dùng tắt nút, xóa luôn và dừng quét
                     if not States.ESPMachines then 
                         RemoveAllESPByTag("Machine")
                         break 
@@ -484,10 +480,11 @@ Btn3.MouseButton1Click:Connect(function()
                     if myHRP and mPart then
                         local distance = (myHRP.Position - mPart.Position).Magnitude
                         
+                        -- Kiểm tra khoảng cách dưới 150 studs
                         if distance <= States.EspMaxDistance then
                             ApplyHighlightESP(machine, Color3.fromRGB(235, 140, 20), "GENERATOR [" .. math.floor(distance) .. "m]", "Machine")
                         else
-                            -- Tự động xóa hẳn ESP nếu máy ở xa quá 270 studs
+                            -- Tự động xóa hẳn ESP nếu máy ở xa quá 150 studs
                             ClearObjectESP(machine, "Machine")
                         end
                     end
