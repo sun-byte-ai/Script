@@ -5,7 +5,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService") -- Thêm dịch vụ quét theo khung hình hình cho giáo
+local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local UndergroundBunker = nil
@@ -90,7 +90,7 @@ StudsInput.Parent = MainFrame
 local Btn2 = CreateClassicButton(115, "Button 2: ESP Killer & Survive", 35)
 local Btn3 = CreateClassicButton(155, "Button 3: ESP Machines (Zone Scan)", 35)
 
-local States = { AutoDodge = false, ESPPlayers = false, ESPMachines = false, DodgeDistance = 48 }
+local States = { AutoDodge = false, ESPPlayers = false, ESPMachines = false, DodgeDistance = 48, EspMaxDistance = 270 }
 
 StudsInput.FocusLost:Connect(function(enterPressed)
     local value = tonumber(StudsInput.Text)
@@ -207,6 +207,7 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
         highlight.Name = hlName
         highlight.Parent = object
     end
+    highlight.Enabled = true
     highlight.FillColor = color
     
     if prefix == "Machine" then
@@ -239,6 +240,7 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
             billboard.Adornee = object:IsA("Model") and (object.PrimaryPart or object:FindFirstChildWhichIsA("BasePart")) or object
             billboard.Parent = object
         end
+        billboard.Enabled = true
         billboard.TextLabel.Text = labelText
         billboard.TextLabel.TextColor3 = color
         
@@ -253,24 +255,37 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
     end
 end
 
-local function RemoveHubESP(tagName)
-    for _, v in pairs(Workspace:GetDescendants()) do
-        if v.Name == tagName then v:Destroy() end
+-- Hàm dọn dẹp sạch sẽ ESP trên map dựa theo Tag
+local function RemoveAllESPByTag(prefix)
+    local hlName = prefix .. "Highlight"
+    local bbName = prefix .. "Billboard"
+    for _, desc in pairs(Workspace:GetDescendants()) do
+        if desc.Name == hlName or desc.Name == bbName then
+            desc:Destroy()
+        end
     end
+end
+
+-- Hàm hủy kích hoạt trực tiếp trên một Model
+local function ClearObjectESP(object, prefix)
+    if not object then return end
+    local hl = object:FindFirstChild(prefix .. "Highlight")
+    local bb = object:FindFirstChild(prefix .. "Billboard")
+    if hl then hl:Destroy() end
+    if bb then bb:Destroy() end
 end
 
 -- ==========================================
 -- 3. XỬ LÝ HÀNH VI VÒNG LẶP HỆ THỐNG
 -- ==========================================
 
-local actionCooldown = false -- Khóa chống xung đột chéo giữa 2 vòng lặp né
+local actionCooldown = false
 
 -- [BUTTON 1]: AUTO DODGE KILLER & CHỐNG NÉ GIÁO THẦN TỐC
 Btn1.MouseButton1Click:Connect(function()
     ToggleButton(Btn1, "AutoDodge", "Button 1: Auto Dodge Killer")
     
     if States.AutoDodge then
-        -- MẠCH 1: KIỂM TRA VẬT THỂ GIÁO (CHẠY ULTRA-FAST THEO FRAME CHỐNG GIÁO NHANH)
         task.spawn(function()
             while States.AutoDodge do
                 RunService.Heartbeat:Wait()
@@ -282,15 +297,10 @@ Btn1.MouseButton1Click:Connect(function()
                     local killerPlayer = FindActiveKiller()
                     local killerHRP = killerPlayer and killerPlayer.Character and killerPlayer.Character:FindFirstChild("HumanoidRootPart")
                     
-                    -- Quét tìm cây giáo đang bay trong Workspace
                     for _, obj in pairs(Workspace:GetChildren()) do
                         if obj:IsA("BasePart") or obj:IsA("Model") then
                             local nameLower = string.lower(obj.Name)
-                            
-                            -- Nhận diện các vật thể có tên liên quan đến Giáo / Phóng vũ khí
                             if string.find(nameLower, "spear") or string.find(nameLower, "projectile") or string.find(nameLower, "thrown") or string.find(nameLower, "giao") then
-                                
-                                -- Chống loại trừ: Nếu cây giáo vẫn đang dính/nằm trên người Killer (chưa phóng) thì bỏ qua
                                 local isEquipped = false
                                 if killerPlayer and killerPlayer.Character and obj:IsDescendantOf(killerPlayer.Character) then
                                     isEquipped = true
@@ -300,13 +310,11 @@ Btn1.MouseButton1Click:Connect(function()
                                     local objPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
                                     local distToSpear = (myHRP.Position - objPos).Magnitude
                                     
-                                    -- Khoảng cách nguy hiểm (Quét từ 55 studs đổ xuống để bảo toàn ko lọt frame)
                                     if distToSpear <= 55 then
                                         local allMachines = ScanMapMachines()
                                         local targetedMachineCFrame = nil
                                         local killerPos = killerHRP and killerHRP.Position or Vector3.new(0, 0, 0)
                                         
-                                        -- Lọc máy cách xa Killer TRÊN 135 STUDS
                                         for _, machine in pairs(allMachines) do
                                             local machineCFrame = machine:IsA("Model") and machine:GetPivot() or machine.CFrame
                                             if (machineCFrame.Position - killerPos).Magnitude > 135 then
@@ -315,14 +323,12 @@ Btn1.MouseButton1Click:Connect(function()
                                             end
                                         end
                                         
-                                        -- Thực hiện Teleport né giáo khẩn cấp
                                         if targetedMachineCFrame then
                                             actionCooldown = true
                                             myHRP.CFrame = targetedMachineCFrame * CFrame.new(0, 1.5, 4.5)
-                                            task.wait(0.6) -- Thời gian hồi nhỏ để cố định vị trí tránh giật lùi
+                                            task.wait(0.6)
                                             actionCooldown = false
                                         else
-                                            -- Backup khẩn cấp nếu map hết máy xa > 135 studs
                                             actionCooldown = true
                                             DeployEmergencyBunker(myHRP.Position)
                                             myHRP.CFrame = CFrame.new(UndergroundBunker.Position + Vector3.new(0, 3, 0))
@@ -339,7 +345,6 @@ Btn1.MouseButton1Click:Connect(function()
             end
         end)
         
-        -- MẠCH 2: NÉ SÁT THỦ TIẾP CẬN THÔNG THƯỜNG (GIỮ NGUYÊN NHƯ CŨ)
         task.spawn(function()
             while States.AutoDodge do
                 task.wait(0.1)
@@ -385,23 +390,62 @@ Btn1.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 2]: ESP PLAYERS
+-- [BUTTON 2]: ESP PLAYERS (GIỚI HẠN 270 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
 Btn2.MouseButton1Click:Connect(function()
     ToggleButton(Btn2, "ESPPlayers", "Button 2: ESP Killer & Survive")
     if not States.ESPPlayers then
-        RemoveHubESP("PlayerHighlight")
-        RemoveHubESP("PlayerBillboard")
+        -- Xoá bỏ triệt để mọi đối tượng ESP người chơi trên toàn map ngay lập tức
+        RemoveAllESPByTag("Player")
     else
         task.spawn(function()
             while States.ESPPlayers do
-                task.wait(0.5)
+                task.wait(0.25)
+                -- Kiểm tra lại trạng thái ở đầu vòng lặp để chặn luồng chạy ngầm khi đã tắt nút
+                if not States.ESPPlayers then 
+                    RemoveAllESPByTag("Player")
+                    break 
+                end
+                
                 local currentKiller = FindActiveKiller()
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                
                 for _, player in pairs(Players:GetPlayers()) do
+                    -- Nếu trong quá trình lặp mà người dùng tắt nút, xóa luôn và dừng quét
+                    if not States.ESPPlayers then 
+                        RemoveAllESPByTag("Player")
+                        break 
+                    end
+                    
                     if player ~= LocalPlayer and player.Character then
-                        if player == currentKiller then
-                            ApplyHighlightESP(player.Character, Color3.fromRGB(255, 0, 0), "[🎯] KILLER: " .. player.Name, "Player")
-                        else
-                            ApplyHighlightESP(player.Character, Color3.fromRGB(0, 255, 100), "[👤] " .. player.Name, "Player")
+                        local pChar = player.Character
+                        local pHRP = pChar:FindFirstChild("HumanoidRootPart")
+                        local pHum = pChar:FindFirstChildOfClass("Humanoid")
+                        
+                        if myHRP and pHRP then
+                            local distance = (myHRP.Position - pHRP.Position).Magnitude
+                            
+                            if distance <= States.EspMaxDistance then
+                                if player == currentKiller then
+                                    ApplyHighlightESP(pChar, Color3.fromRGB(255, 0, 0), "[🎯] KILLER: " .. player.Name, "Player")
+                                else
+                                    local surviveColor = Color3.fromRGB(0, 255, 100)
+                                    if pHum then
+                                        local healthPct = (pHum.Health / pHum.MaxHealth) * 100
+                                        if healthPct >= 70 then
+                                            surviveColor = Color3.fromRGB(0, 255, 100) -- Máu đầy: Xanh lá
+                                        elseif healthPct >= 30 and healthPct < 70 then
+                                            surviveColor = Color3.fromRGB(200, 255, 0) -- Máu trung bình: Vàng chanh
+                                        else
+                                            surviveColor = Color3.fromRGB(255, 100, 0) -- Máu thấp: Đỏ vàng
+                                        end
+                                    end
+                                    ApplyHighlightESP(pChar, surviveColor, "[👤] " .. player.Name .. " [" .. math.floor(distance) .. "m]", "Player")
+                                end
+                            else
+                                -- Tự động xóa hẳn các đối tượng ESP nếu đi quá 270 studs
+                                ClearObjectESP(pChar, "Player")
+                            end
                         end
                     end
                 end
@@ -410,23 +454,45 @@ Btn2.MouseButton1Click:Connect(function()
     end
 end)
 
--- [BUTTON 3]: ESP MÁY SỬA (Chế độ Hybrid Ngày/Đêm)
+-- [BUTTON 3]: ESP MÁY SỬA (GIỚI HẠN 270 STUDS + PHÁ HỦY HOÀN TOÀN KHI TẮT)
 Btn3.MouseButton1Click:Connect(function()
     ToggleButton(Btn3, "ESPMachines", "Button 3: ESP Machines (Zone Scan)")
     if not States.ESPMachines then
-        RemoveHubESP("MachineHighlight")
-        RemoveHubESP("MachineBillboard")
+        -- Xoá bỏ triệt để mọi đối tượng ESP máy trên toàn map ngay lập tức
+        RemoveAllESPByTag("Machine")
     else
         task.spawn(function()
             while States.ESPMachines do
-                RemoveHubESP("MachineHighlight") 
-                RemoveHubESP("MachineBillboard")
-                
-                local currentActiveMachines = ScanMapMachines()
-                for _, machine in pairs(currentActiveMachines) do
-                    ApplyHighlightESP(machine, Color3.fromRGB(235, 140, 20), "GENERATOR", "Machine")
+                -- Kiểm tra lại trạng thái ở đầu vòng lặp để chặn luồng chạy ngầm khi đã tắt nút
+                if not States.ESPMachines then 
+                    RemoveAllESPByTag("Machine")
+                    break 
                 end
-                task.wait(2.5)
+                
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local currentActiveMachines = ScanMapMachines()
+                
+                for _, machine in pairs(currentActiveMachines) do
+                    -- Nếu trong quá trình lặp mà người dùng tắt nút, xóa luôn và dừng quét
+                    if not States.ESPMachines then 
+                        RemoveAllESPByTag("Machine")
+                        break 
+                    end
+                    
+                    local mPart = machine:IsA("Model") and (machine.PrimaryPart or machine:FindFirstChildWhichIsA("BasePart")) or machine
+                    if myHRP and mPart then
+                        local distance = (myHRP.Position - mPart.Position).Magnitude
+                        
+                        if distance <= States.EspMaxDistance then
+                            ApplyHighlightESP(machine, Color3.fromRGB(235, 140, 20), "GENERATOR [" .. math.floor(distance) .. "m]", "Machine")
+                        else
+                            -- Tự động xóa hẳn ESP nếu máy ở xa quá 270 studs
+                            ClearObjectESP(machine, "Machine")
+                        end
+                    end
+                end
+                task.wait(1.2)
             end
         end)
     end
