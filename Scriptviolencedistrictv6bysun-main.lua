@@ -1,10 +1,11 @@
 -- =========================================================================
--- SURVIVAL ENGINE HUB - PHIÊN BẢN CÂN BẰNG ĐỘ SÁNG NGÀY & ĐÊM
+-- SURVIVAL ENGINE HUB - PHIÊN BẢN CÂN BẰNG ĐỘ SÁNG NGÀY & ĐÊM + ANTI SPEAR
 -- =========================================================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService") -- Thêm dịch vụ quét theo khung hình hình cho giáo
 
 local LocalPlayer = Players.LocalPlayer
 local UndergroundBunker = nil
@@ -50,7 +51,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Text = "  [💀] SURVIVAL HUB - HYBRID VISION"
+Title.Text = "  [💀] SURVIVAL HUB - ANTI SPEAR UPDATED"
 Title.Font = Enum.Font.Code
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -71,7 +72,7 @@ local function CreateClassicButton(yPos, text, height)
     return btn
 end
 
-local Btn1 = CreateClassicButton(45, "Button 1: Auto Dodge Killer", 35)
+local Btn1 = CreateClassicButton(45, "Button 1: Auto Dodge Killer & Spear", 35)
 
 local StudsInput = Instance.new("TextBox")
 StudsInput.Size = UDim2.new(0.92, 0, 0, 25)
@@ -208,11 +209,10 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
     end
     highlight.FillColor = color
     
-    -- [CẬP NHẬT] ĐỘ MỜ "TỶ LỆ VÀNG" ĐỂ HỢP CẢ NGÀY LẪN ĐÊM
     if prefix == "Machine" then
         highlight.OutlineColor = color 
-        highlight.FillTransparency = 0.62     -- Tăng nhẹ độ đậm để ban ngày nhìn thấy khối máy tốt hơn
-        highlight.OutlineTransparency = 0.2    -- Giữ nét viền rõ ràng nhưng không bị rực viền trắng
+        highlight.FillTransparency = 0.62     
+        highlight.OutlineTransparency = 0.2    
     else
         highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
         highlight.FillTransparency = 0.4
@@ -242,11 +242,10 @@ local function ApplyHighlightESP(object, color, labelText, prefix)
         billboard.TextLabel.Text = labelText
         billboard.TextLabel.TextColor3 = color
         
-        -- [CẬP NHẬT CHỐNG LÓA BAN NGÀY] Thêm viền chữ đen để hack tầm nhìn ban ngày
         if prefix == "Machine" then
-            billboard.TextLabel.TextTransparency = 0.1       -- Giữ chữ rõ nét (chỉ mờ 10%)
-            billboard.TextLabel.TextStrokeTransparency = 0.15 -- Đổ bóng viền đen đậm sắc nét
-            billboard.TextLabel.TextStrokeColor3 = Color3.fromRGB(10, 10, 10) -- Viền đen tuyền bao quanh chữ
+            billboard.TextLabel.TextTransparency = 0.1       
+            billboard.TextLabel.TextStrokeTransparency = 0.15 
+            billboard.TextLabel.TextStrokeColor3 = Color3.fromRGB(10, 10, 10) 
         else
             billboard.TextLabel.TextTransparency = 0
             billboard.TextLabel.TextStrokeTransparency = 1
@@ -264,45 +263,126 @@ end
 -- 3. XỬ LÝ HÀNH VI VÒNG LẶP HỆ THỐNG
 -- ==========================================
 
--- [BUTTON 1]: AUTO DODGE
+local actionCooldown = false -- Khóa chống xung đột chéo giữa 2 vòng lặp né
+
+-- [BUTTON 1]: AUTO DODGE KILLER & CHỐNG NÉ GIÁO THẦN TỐC
 Btn1.MouseButton1Click:Connect(function()
     ToggleButton(Btn1, "AutoDodge", "Button 1: Auto Dodge Killer")
-    task.spawn(function()
-        while States.AutoDodge do
-            task.wait(0.1)
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local killerPlayer = FindActiveKiller()
-                if killerPlayer and killerPlayer.Character and killerPlayer.Character:FindFirstChild("HumanoidRootPart") then
+    
+    if States.AutoDodge then
+        -- MẠCH 1: KIỂM TRA VẬT THỂ GIÁO (CHẠY ULTRA-FAST THEO FRAME CHỐNG GIÁO NHANH)
+        task.spawn(function()
+            while States.AutoDodge do
+                RunService.Heartbeat:Wait()
+                if actionCooldown then continue end
+                
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
                     local myHRP = char.HumanoidRootPart
-                    local killerHRP = killerPlayer.Character.HumanoidRootPart
-                    local currentDistance = (myHRP.Position - killerHRP.Position).Magnitude
+                    local killerPlayer = FindActiveKiller()
+                    local killerHRP = killerPlayer and killerPlayer.Character and killerPlayer.Character:FindFirstChild("HumanoidRootPart")
                     
-                    if currentDistance <= States.DodgeDistance then
-                        local allMachines = ScanMapMachines()
-                        local targetedMachineCFrame = nil
-                        
-                        for _, machine in pairs(allMachines) do
-                            local machineCFrame = machine:IsA("Model") and machine:GetPivot() or machine.CFrame
-                            if (machineCFrame.Position - killerHRP.Position).Magnitude >= 110 then
-                                targetedMachineCFrame = machineCFrame
-                                break
+                    -- Quét tìm cây giáo đang bay trong Workspace
+                    for _, obj in pairs(Workspace:GetChildren()) do
+                        if obj:IsA("BasePart") or obj:IsA("Model") then
+                            local nameLower = string.lower(obj.Name)
+                            
+                            -- Nhận diện các vật thể có tên liên quan đến Giáo / Phóng vũ khí
+                            if string.find(nameLower, "spear") or string.find(nameLower, "projectile") or string.find(nameLower, "thrown") or string.find(nameLower, "giao") then
+                                
+                                -- Chống loại trừ: Nếu cây giáo vẫn đang dính/nằm trên người Killer (chưa phóng) thì bỏ qua
+                                local isEquipped = false
+                                if killerPlayer and killerPlayer.Character and obj:IsDescendantOf(killerPlayer.Character) then
+                                    isEquipped = true
+                                end
+                                
+                                if not isEquipped then
+                                    local objPos = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
+                                    local distToSpear = (myHRP.Position - objPos).Magnitude
+                                    
+                                    -- Khoảng cách nguy hiểm (Quét từ 55 studs đổ xuống để bảo toàn ko lọt frame)
+                                    if distToSpear <= 55 then
+                                        local allMachines = ScanMapMachines()
+                                        local targetedMachineCFrame = nil
+                                        local killerPos = killerHRP and killerHRP.Position or Vector3.new(0, 0, 0)
+                                        
+                                        -- Lọc máy cách xa Killer TRÊN 135 STUDS
+                                        for _, machine in pairs(allMachines) do
+                                            local machineCFrame = machine:IsA("Model") and machine:GetPivot() or machine.CFrame
+                                            if (machineCFrame.Position - killerPos).Magnitude > 135 then
+                                                targetedMachineCFrame = machineCFrame
+                                                break
+                                            end
+                                        end
+                                        
+                                        -- Thực hiện Teleport né giáo khẩn cấp
+                                        if targetedMachineCFrame then
+                                            actionCooldown = true
+                                            myHRP.CFrame = targetedMachineCFrame * CFrame.new(0, 1.5, 4.5)
+                                            task.wait(0.6) -- Thời gian hồi nhỏ để cố định vị trí tránh giật lùi
+                                            actionCooldown = false
+                                        else
+                                            -- Backup khẩn cấp nếu map hết máy xa > 135 studs
+                                            actionCooldown = true
+                                            DeployEmergencyBunker(myHRP.Position)
+                                            myHRP.CFrame = CFrame.new(UndergroundBunker.Position + Vector3.new(0, 3, 0))
+                                            task.wait(2.2)
+                                            actionCooldown = false
+                                        end
+                                        break
+                                    end
+                                end
                             end
-                        end
-                        
-                        if targetedMachineCFrame then
-                            myHRP.CFrame = targetedMachineCFrame * CFrame.new(0, 1.5, 4.5)
-                            task.wait(0.4) 
-                        else
-                            DeployEmergencyBunker(myHRP.Position)
-                            myHRP.CFrame = CFrame.new(UndergroundBunker.Position + Vector3.new(0, 3, 0))
-                            task.wait(2.5)
                         end
                     end
                 end
             end
-        end
-    end)
+        end)
+        
+        -- MẠCH 2: NÉ SÁT THỦ TIẾP CẬN THÔNG THƯỜNG (GIỮ NGUYÊN NHƯ CŨ)
+        task.spawn(function()
+            while States.AutoDodge do
+                task.wait(0.1)
+                if actionCooldown then continue end
+                
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local killerPlayer = FindActiveKiller()
+                    if killerPlayer and killerPlayer.Character and killerPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local myHRP = char.HumanoidRootPart
+                        local killerHRP = killerPlayer.Character.HumanoidRootPart
+                        local currentDistance = (myHRP.Position - killerHRP.Position).Magnitude
+                        
+                        if currentDistance <= States.DodgeDistance then
+                            local allMachines = ScanMapMachines()
+                            local targetedMachineCFrame = nil
+                            
+                            for _, machine in pairs(allMachines) do
+                                local machineCFrame = machine:IsA("Model") and machine:GetPivot() or machine.CFrame
+                                if (machineCFrame.Position - killerHRP.Position).Magnitude >= 110 then
+                                    targetedMachineCFrame = machineCFrame
+                                    break
+                                end
+                            end
+                            
+                            if targetedMachineCFrame then
+                                actionCooldown = true
+                                myHRP.CFrame = targetedMachineCFrame * CFrame.new(0, 1.5, 4.5)
+                                task.wait(0.4) 
+                                actionCooldown = false
+                            else
+                                actionCooldown = true
+                                DeployEmergencyBunker(myHRP.Position)
+                                myHRP.CFrame = CFrame.new(UndergroundBunker.Position + Vector3.new(0, 3, 0))
+                                task.wait(2.5)
+                                actionCooldown = false
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
 end)
 
 -- [BUTTON 2]: ESP PLAYERS
@@ -344,7 +424,6 @@ Btn3.MouseButton1Click:Connect(function()
                 
                 local currentActiveMachines = ScanMapMachines()
                 for _, machine in pairs(currentActiveMachines) do
-                    -- Sử dụng tông vàng hổ phách ấm (235, 140, 20) cực kỳ thích nghi môi trường
                     ApplyHighlightESP(machine, Color3.fromRGB(235, 140, 20), "GENERATOR", "Machine")
                 end
                 task.wait(2.5)
