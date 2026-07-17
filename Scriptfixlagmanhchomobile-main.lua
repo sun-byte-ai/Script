@@ -1,68 +1,59 @@
--- ==========================================
--- SUPER LAG FIX & FPS BOOSTER (SAFE & POWERFUL)
--- Hỗ trợ giảm lag mạnh mẽ, không gây lỗi game
--- ==========================================
+-- ==================================================
+-- ANTI-LAG SCRIPT: Cân bằng Đồ họa & Hiệu năng
+-- ==================================================
 
 local Lighting = game:GetService("Lighting")
-local Terrain = workspace:FindFirstChildOfClass("Terrain")
+local Terrain = workspace:WaitForChild("Terrain")
 
--- 1. Tối ưu hóa Lighting & Giảm tải đổ bóng (Shadows)
-pcall(function()
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 9e9 -- Xóa sương mù để giảm khoảng cách render nặng
-    for _, effect in ipairs(Lighting:GetChildren()) do
-        if effect:IsA("DepthOfFieldEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
-            effect.Enabled = false -- Tắt các hiệu ứng làm mờ/lấp lánh nặng máy
-        end
+-- 1. Tối ưu hóa Ánh sáng (Tắt hiệu ứng điện ảnh nặng, giữ lại màu sắc)
+Lighting.GlobalShadows = false -- Tắt bóng đổ toàn cầu (Nguyên nhân gây lag số 1)
+Lighting.FogEnd = 9e9 -- Xóa sương mù để giảm tải render xa
+
+-- Tắt các hiệu ứng làm mờ và lóa mắt
+for _, v in pairs(Lighting:GetChildren()) do
+    if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") then
+        v.Enabled = false
     end
-end)
+end
 
--- 2. Tối ưu hóa Địa hình (Terrain)
+-- 2. Tối ưu hóa Nước & Địa hình (Giữ nước trong nhưng không tính toán gợn sóng)
 if Terrain then
     Terrain.WaterWaveSize = 0
     Terrain.WaterWaveSpeed = 0
     Terrain.WaterReflectance = 0
-    Terrain.WaterTransparency = 0
+    Terrain.WaterTransparency = 0.5 -- Nước vẫn nhìn xuyên thấu nhẹ
 end
 
--- 3. Ép cấu hình render của Roblox về mức thấp nhất
-pcall(function()
-    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-end)
-
--- 4. Hàm xử lý tối ưu hóa chi tiết từng Object
-local function optimizeObject(obj)
-    -- Chuyển chất liệu các khối về SmoothPlastic để giảm tải cho GPU (VRAM)
-    if obj:IsA("Part") or obj:IsA("CornerWedgePart") or obj:IsA("TrussPart") or obj:IsA("WedgePart") then
-        obj.Material = Enum.Material.SmoothPlastic
-        obj.CastShadow = false
-    -- Tối ưu hóa các chi tiết Mesh (vật thể dựng sẵn)
-    elseif obj:IsA("MeshPart") then
-        obj.Material = Enum.Material.SmoothPlastic
-        obj.CastShadow = false
-        obj.TextureID = "" -- Xóa vân bề mặt Mesh nặng
-    elseif obj:IsA("SpecialMesh") then
-        obj.TextureId = ""
-    -- Vô hiệu hóa Decal/Vân dán tường (nguyên nhân gây lag hàng đầu khi load map)
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        obj:Destroy() -- Hoặc đổi thành obj.Transparency = 1 nếu không muốn xóa hẳn
-    -- Vô hiệu hóa hiệu ứng hạt (lửa, khói, lấp lánh bụi)
-    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
-        obj.Enabled = false
-    elseif obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-        obj.Enabled = false
+-- 3. Tối ưu hóa Vật thể và Hạt (Particles)
+for _, v in pairs(workspace:GetDescendants()) do
+    -- Xử lý các khối block
+    if v:IsA("BasePart") and not v:IsA("MeshPart") then
+        v.CastShadow = false -- Tắt bóng đổ của từng vật thể
+        -- LƯU Ý: Không đổi v.Material thành SmoothPlastic để giữ đồ họa đẹp
+        
+    -- Xử lý Mesh (Các vật thể 3D phức tạp)
+    elseif v:IsA("MeshPart") then
+        v.CastShadow = false
+        v.RenderFidelity = Enum.RenderFidelity.Performance -- Tự động giảm chi tiết khi ở xa
+        
+    -- Xử lý hiệu ứng Hạt (Lửa, Khói, Phép thuật)
+    elseif v:IsA("ParticleEmitter") then
+        -- Giảm 50% số lượng hạt thay vì xóa hoàn toàn để game vẫn có hiệu ứng kỹ năng
+        v.Rate = v.Rate / 2
+    elseif v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+        v.Enabled = false -- Tắt các hiệu ứng cháy nổ thừa thãi
     end
 end
 
--- Quét và tối ưu hóa toàn bộ thế giới game hiện tại
-for _, obj in ipairs(workspace:GetDescendants()) do
-    optimizeObject(obj)
-end
+-- Xóa các Decal/Texture rác không cần thiết nếu bộ nhớ đầy (Tùy chọn, hiện đang ẩn)
+-- for _, v in pairs(workspace:GetDescendants()) do if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end end
 
--- Tự động tối ưu hóa các vật thể mới xuất hiện (quái vật mới spawn, chiêu thức của người chơi khác...)
-workspace.DescendantAdded:Connect(function(obj)
-    task.wait(0.1) -- Đợi một chút để tránh xung đột hệ thống khi vật thể vừa tạo
-    optimizeObject(obj)
-end)
+-- 4. Thông báo hoàn tất
+local StarterGui = game:GetService("StarterGui")
+StarterGui:SetCore("SendNotification", {
+    Title = "Anti-Lag Kích Hoạt";
+    Text = "Đồ họa Trung Bình - FPS Ổn định!";
+    Duration = 5;
+})
 
-print("--- [FIX LAG SUCCESSFUL] Script đã kích hoạt mượt mà! ---")
+print("✅ Anti-lag đã chạy thành công!")
